@@ -1,0 +1,23 @@
+node_modules/
+dist/
+*.local
+.DS_Store
+Thumbs.db
+
+# 動画・音声の素材は公開リポジトリに入れない（自作の曲や映像を誤って公開しないため）
+*.mp4
+*.mov
+*.m4v
+*.webm
+*.mkv
+*.mp3
+*.wav
+*.m4a
+*.aac
+*.flac
+
+# フォントファイルも入れない（再配布が禁止のものが多いため。仕様書9章）
+*.ttf
+*.otf
+*.woff
+*.woff2

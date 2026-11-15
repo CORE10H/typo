@@ -65,7 +65,7 @@ export interface VideoInfo {
   audioChannels: number | null;
 }
 
-/** 受け付ける動画の上限（仕様書4章：720p〜1080p、5分まで） */
+/** 受け付ける動画の上限（仕様書4章：480p・720p・1080p、5分まで） */
 export const LIMITS = {
   maxDurationSec: 5 * 60 + 5,
   maxLongSide: 1920,

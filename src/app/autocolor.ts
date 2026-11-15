@@ -10,7 +10,7 @@ import { getTheme, hexToRgb, luminance, type Theme } from '../engine/themes';
 const SAMPLE_WIDTH = 96;
 
 function signature(p: Project, line: LineItem): string {
-  return `${line.start.toFixed(1)}|${line.end.toFixed(1)}|${line.position ?? p.position}|${p.theme}|${p.output.shape}`;
+  return `v2|${line.start.toFixed(1)}|${line.end.toFixed(1)}|${line.position ?? p.position}|${p.theme}|${p.output.shape}`;
 }
 
 /** 文字を置く位置にあたる、映像の中の範囲（0〜1） */

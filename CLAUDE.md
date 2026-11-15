@@ -7,7 +7,7 @@
 - **仕様は `docs/spec.md` が正。** 迷ったら仕様書に従う。仕様書と食い違う実装や提案をするときは、先に依頼者へ確認する。
 - **作業は段階ごと。** 仕様書「8. 開発ステップ」の段階のうち、頼まれた段階だけを作る。頼まれていない段階には進まない。
 - **依頼者はプログラミングの専門知識がない。** 説明は平易な日本語で。専門用語を使うときは、ひとこと説明を添える。
-- **文字の描画は Canvas 2D。** プレビューと書き出しで同じ描画関数を使う（今は `src/draw.ts` の `drawOverlay`）。文字を DOM（ページの部品）で動かす方式は、動画に焼き込めないので使わない。
+- **文字の描画は Canvas 2D。** プレビューと書き出しで同じ描画関数を使う（`src/engine/renderer.ts` の `Renderer`）。文字を DOM（ページの部品）で動かす方式は、動画に焼き込めないので使わない。
 
 ## 進め方
 
@@ -24,11 +24,26 @@
 | --- | --- |
 | `docs/spec.md` | 仕様書（正） |
 | `docs/export-notes.md` | 書き出しに使うライブラリの比較と選定理由、Android Chrome の対応状況 |
-| `index.html`、`src/` | 段階1の書き出し検証ページ |
-| `src/draw.ts` | 文字を描く関数。プレビューと書き出しで共用する |
+| `index.html`、`src/main.ts` | アプリ本体の入口。URL の # 以降で画面を切り替える |
+| `src/core/` | 作品のデータ形式（`model.ts`）、歌詞の読み取り（`lyrics.ts`）、叩き台づくり（`draft.ts`） |
+| `src/engine/renderer.ts` | 歌詞を描く本体。プレビューと書き出しで共用する |
+| `src/engine/presets/` | 動き12種。基本型は `basic.ts` のデータで定義。特殊型は1プリセット＝1ファイル（`rondo.ts`、`shatter.ts`、`tangle.ts`） |
+| `src/engine/themes.ts` | テーマ3種（色・書体・縁取り・発光・粒子）のデータ |
+| `src/engine/fonts.ts` | 同梱する書体の読み込み |
+| `src/app/` | 画面まわり。`state.ts`（作品の状態・元に戻す・自動保存）、`store.ts`（保存先 IndexedDB）、`player.ts`（プレビュー再生）、`autocolor.ts`（自動配色） |
+| `src/app/screens/` | 4つの画面（`list` 作品一覧、`setup` 取り込み、`edit` 編集、`export` 書き出し）と、タイムライン・タップ同期・動きの見本 |
+| `src/video/exporter.ts` | 動画の読み込みと書き出し（Mediabunny を使用） |
 | `src/layout.ts` | 出力の形（横のまま／縦はめ込み）ごとの寸法計算 |
-| `src/exporter.ts` | 動画の読み込みと書き出し（Mediabunny を使用） |
+| `verify.html`、`src/verify/` | 段階1の書き出し検証ページ。不具合の切り分け用に残してある |
+| `public/` | ホーム画面追加用の設定（`manifest.webmanifest`）、通信なしでも開くための控え（`sw.js`）、アイコン |
 | `.github/workflows/deploy.yml` | main に push すると GitHub Pages へ自動公開する設定 |
+
+## 作りの決まり
+
+- 動きを足すとき：移動・拡大・回転・ぼかし・透明度・時間差で表せるものは `basic.ts` にデータを1件足す。専用の計算が要るものだけ、ファイルを1つ作って `presets/index.ts` に1行足す。
+- 描画に `Math.random` や現在時刻を使わない。時刻 t から必ず同じ絵が出るようにする（プレビューと書き出しを一致させるため）。乱数は `engine/util.ts` の `hash` を使う。
+- 同梱する書体は、再配布が許されたもの（SIL Open Font License）だけ。今は Shippori Mincho、Zen Old Mincho、Kaisei Decol の3つ。`@fontsource` のパッケージから取り込むので、フォントファイル自体はリポジトリに入れない。
+- 作品のデータ形式を変えるときは、`model.ts` の `normalizeProject` で古い作品を読めるようにする。
 
 ## コマンド
 

@@ -189,7 +189,11 @@ export class Timeline {
     const len = end0 - start0;
     let moved = false;
     e.preventDefault();
-    bar.setPointerCapture(e.pointerId);
+    try {
+      bar.setPointerCapture(e.pointerId);
+    } catch {
+      // 取れなくても、帯の上で指を動かす分には動く
+    }
     const snap = (t: number): number => (p.snap ? snapToBeat(p, t) : Math.round(t * 100) / 100);
 
     const onMove = (ev: PointerEvent): void => {

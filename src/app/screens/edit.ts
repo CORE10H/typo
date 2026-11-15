@@ -372,11 +372,17 @@ export function mountEdit(root: HTMLElement): () => void {
               onclick: () => {
                 const lines = linesOf(p);
                 const next = lines[lines.indexOf(line) + 1];
-                const start = line.end;
-                const end = Math.min(next ? next.start : player.duration, start + 2);
+                let start = line.end;
+                let end = Math.min(next ? next.start : player.duration, start + 2);
                 if (end - start < 0.3) {
-                  toast('後ろに空きがありません。先にこの行を短くしてください', 'error');
-                  return;
+                  // 後ろに空きがないときは、この行の時間を半分に分けて、後ろ半分を新しい行にする
+                  if (line.end - line.start < 0.6) {
+                    toast('この行が短すぎて、行を足せません。先に行を長くしてください', 'error');
+                    return;
+                  }
+                  end = line.end;
+                  start = Math.round(((line.start + line.end) / 2) * 100) / 100;
+                  line.end = start;
                 }
                 const added: LineItem = {
                   ...line,

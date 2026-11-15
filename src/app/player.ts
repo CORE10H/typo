@@ -21,9 +21,11 @@ export class Player {
   private raf = 0;
   private dirty = true;
   private hasVideo = false;
-  private clock = 0; // 動画がないときの時計
+  // 動画がないときの時計。再生中は「再生を始めた時刻からの経過」で求める
+  // （画面の描き直しが止まっていても、時刻だけは正しく進むようにするため）
+  private clockBase = 0;
+  private clockStartedAt = 0;
   private clockPlaying = false;
-  private lastTick = 0;
   private loop: { start: number; end: number } | null = null;
   private destroyed = false;
 
@@ -79,6 +81,7 @@ export class Player {
       this.video.removeAttribute('src');
       this.video.load();
     }
+    this.clockBase = 0;
     this.clockPlaying = false;
     this.dirty = true;
   }
@@ -88,7 +91,9 @@ export class Player {
   }
 
   get time(): number {
-    return this.hasVideo ? this.video.currentTime : this.clock;
+    if (this.hasVideo) return this.video.currentTime;
+    if (!this.clockPlaying) return this.clockBase;
+    return Math.min(this.duration, this.clockBase + (performance.now() - this.clockStartedAt) / 1000);
   }
 
   get playing(): boolean {
@@ -99,8 +104,9 @@ export class Player {
     if (this.hasVideo) {
       void this.video.play().catch(() => undefined);
     } else {
+      if (this.clockBase >= this.duration) this.clockBase = 0;
+      this.clockStartedAt = performance.now();
       this.clockPlaying = true;
-      this.lastTick = performance.now();
       this.onPlayState?.(true);
     }
   }
@@ -108,6 +114,7 @@ export class Player {
   pause(): void {
     if (this.hasVideo) this.video.pause();
     else {
+      this.clockBase = this.time;
       this.clockPlaying = false;
       this.onPlayState?.(false);
     }
@@ -121,7 +128,10 @@ export class Player {
   seek(t: number): void {
     const clamped = Math.max(0, Math.min(this.duration, t));
     if (this.hasVideo) this.video.currentTime = clamped;
-    else this.clock = clamped;
+    else {
+      this.clockBase = clamped;
+      this.clockStartedAt = performance.now();
+    }
     this.dirty = true;
   }
 
@@ -138,16 +148,11 @@ export class Player {
   private tick = (): void => {
     if (this.destroyed) return;
     this.raf = requestAnimationFrame(this.tick);
-    const now = performance.now();
-    if (!this.hasVideo && this.clockPlaying) {
-      this.clock += (now - this.lastTick) / 1000;
-      if (this.clock >= this.duration) {
-        this.clock = this.duration;
-        this.clockPlaying = false;
-        this.onPlayState?.(false);
-      }
+    if (!this.hasVideo && this.clockPlaying && this.time >= this.duration) {
+      this.clockBase = this.duration;
+      this.clockPlaying = false;
+      this.onPlayState?.(false);
     }
-    this.lastTick = now;
 
     const playing = this.playing;
     if (playing && this.loop && (this.time >= this.loop.end || this.time < this.loop.start - 0.05)) {

@@ -106,7 +106,11 @@ export function openTapSync(player: Player, startIndex: number, onClose: () => v
 
   zone.addEventListener('pointerdown', (e) => {
     e.preventDefault();
-    zone.setPointerCapture(e.pointerId);
+    try {
+      zone.setPointerCapture(e.pointerId);
+    } catch {
+      // 取れなくても動作に支障はない
+    }
     down();
   });
   zone.addEventListener('pointerup', up);

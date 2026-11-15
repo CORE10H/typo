@@ -427,12 +427,26 @@ input[type='range'] {
   display: flex;
   flex-direction: column;
   height: 100dvh;
+  width: 100%;
   max-width: 720px;
   margin: 0 auto;
+  overflow: hidden;
+}
+
+.edit > * {
+  min-width: 0;
 }
 
 .edit > .bar {
   padding: 6px 10px;
+}
+
+.banner span {
+  min-width: 0;
+}
+
+.banner .btn {
+  flex: none;
 }
 
 .banner {
@@ -553,7 +567,7 @@ input[type='range'] {
 
 .line {
   display: grid;
-  grid-template-columns: 3.6em 1fr auto;
+  grid-template-columns: 3.6em minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px;
   width: 100%;

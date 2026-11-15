@@ -606,7 +606,9 @@ export class Renderer {
         ctx.globalCompositeOperation = 'lighter';
         ctx.globalAlpha = Math.min(1, fx.screenFlash);
         ctx.fillStyle = this.theme.flash;
-        ctx.fillRect(0, 0, this.layout.width, this.layout.height);
+        // 光らせるのは映像の範囲だけ（縦はめ込みの黒い帯は、黒いまま保つ）
+        const v = this.layout.video;
+        ctx.fillRect(v.x, v.y, v.width, v.height);
         ctx.globalCompositeOperation = 'source-over';
       }
     }

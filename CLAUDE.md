@@ -12,6 +12,7 @@
 ## 進め方
 
 - **2026-11-16 の依頼による例外**：依頼者が多忙のため、第1版の完成（段階2〜6）までは Claude が主体的に通して進めてよい、と任された。計画の了承待ちは不要。ただし段階ごとにコミットし、人間の確認がどうしても要ること（実機での確認、費用や公開範囲に関わる判断）だけ依頼者に尋ねる。段階7以降は、あらためて頼まれてから。
+- **同日の追加の依頼**：演出拡張（`mv_kinetic_typography_kit` の資料に沿ったもの）も、判断を任されて通しで作った。設計と決めたことは `docs/effects.md`。この資料のフォルダは依頼者の手元にあるだけで、公開リポジトリには入れていない。入れるかどうかは依頼者が決める。
 - 上の例外を除き、作り始める前に計画を見せ、了承を得てから着手する。
 - 各段階が終わったら、依頼者がスマホ（検証機：Xperia 5 II の Chrome）で試す手順を箇条書きで渡す。
 - 合格条件を満たせないと判断したら、無理に続けず、理由と代案を報告する。
@@ -24,14 +25,17 @@
 | --- | --- |
 | `docs/spec.md` | 仕様書（正） |
 | `docs/export-notes.md` | 書き出しに使うライブラリの比較と選定理由、Android Chrome の対応状況 |
+| `docs/effects.md` | 演出拡張の設計（動き・重ねる効果・レシピの三層、重ねたときの決まり、提案の仕組み、足し方） |
 | `index.html`、`src/main.ts` | アプリ本体の入口。URL の # 以降で画面を切り替える |
-| `src/core/` | 作品のデータ形式（`model.ts`）、歌詞の読み取り（`lyrics.ts`）、叩き台づくり（`draft.ts`） |
+| `src/core/` | 作品のデータ形式（`model.ts`）、歌詞の読み取り（`lyrics.ts`）、叩き台づくり（`draft.ts`）、演出の提案（`suggest.ts`）、AIへの依頼文と返事の検査（`aiexchange.ts`） |
 | `src/engine/renderer.ts` | 歌詞を描く本体。プレビューと書き出しで共用する |
-| `src/engine/presets/` | 動き12種。基本型は `basic.ts` のデータで定義。特殊型は1プリセット＝1ファイル（`rondo.ts`、`shatter.ts`、`tangle.ts`） |
+| `src/engine/presets/` | 動き21種。基本型は `basic.ts` のデータで定義。特殊型は1プリセット＝1ファイル（`rondo.ts`、`shatter.ts`、`tangle.ts`、`flip.ts`） |
+| `src/engine/effects/` | 動きの上に重ねる効果27種。分類ごとに1ファイル。共通の型と、重ねたときの決まりは `types.ts` |
+| `src/engine/recipes.ts` | レシピ15種（動き1つ＋効果いくつかの組み合わせ）。番号の参照だけのデータ |
 | `src/engine/themes.ts` | テーマ3種（色・書体・縁取り・発光・粒子）のデータ |
 | `src/engine/fonts.ts` | 同梱する書体の読み込み |
 | `src/app/` | 画面まわり。`state.ts`（作品の状態・元に戻す・自動保存）、`store.ts`（保存先 IndexedDB）、`player.ts`（プレビュー再生）、`autocolor.ts`（自動配色） |
-| `src/app/screens/` | 4つの画面（`list` 作品一覧、`setup` 取り込み、`edit` 編集、`export` 書き出し）と、タイムライン・タップ同期・動きの見本 |
+| `src/app/screens/` | 4つの画面（`list` 作品一覧、`setup` 取り込み、`edit` 編集、`export` 書き出し）と、タイムライン・タップ同期・演出の見本（`thumbs`）・演出の提案の窓（`suggestui`） |
 | `src/video/exporter.ts` | 動画の読み込みと書き出し（Mediabunny を使用） |
 | `src/layout.ts` | 出力の形（横のまま／縦はめ込み）ごとの寸法計算 |
 | `verify.html`、`src/verify/` | 段階1の書き出し検証ページ。不具合の切り分け用に残してある |
@@ -41,6 +45,10 @@
 ## 作りの決まり
 
 - 動きを足すとき：移動・拡大・回転・ぼかし・透明度・時間差で表せるものは `basic.ts` にデータを1件足す。専用の計算が要るものだけ、ファイルを1つ作って `presets/index.ts` に1行足す。
+- 効果を足すとき：`effects/` の該当ファイルに1つ書き、`effects/index.ts` に1行足す。レシピを足すとき：`recipes.ts` にデータを1件足す。
+- 動きとレシピには、提案用の手がかり（`meta`）を必ず付ける。付け忘れると型チェックで止まる。
+- 映像そのものを動かす効果（寄り・揺れ）は `Renderer.camera(t)` を通す。プレビュー（`player.ts`）と書き出し（`exporter.ts`）の両方が同じ値を使う。片方だけ変えない。
+- 外から来たデータ（保存した作品、AIの返事）に入っている番号は、カタログにあるものだけを使う。無い番号は捨てる。
 - 描画に `Math.random` や現在時刻を使わない。時刻 t から必ず同じ絵が出るようにする（プレビューと書き出しを一致させるため）。乱数は `engine/util.ts` の `hash` を使う。
 - 同梱する書体は、再配布が許されたもの（SIL Open Font License）だけ。今は Shippori Mincho、Zen Old Mincho、Kaisei Decol の3つ。`@fontsource` のパッケージから取り込むので、フォントファイル自体はリポジトリに入れない。
 - 作品のデータ形式を変えるときは、`model.ts` の `normalizeProject` で古い作品を読めるようにする。

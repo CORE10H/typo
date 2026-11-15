@@ -9,6 +9,10 @@
     "preview": "vite preview --host"
   },
   "dependencies": {
+    "@fontsource/kaisei-decol": "^5.3.1",
+    "@fontsource/shippori-mincho": "^5.3.0",
+    "@fontsource/zen-old-mincho": "^5.3.1",
+    "budoux": "^0.10.3",
     "mediabunny": "^1.65.2"
   },
   "devDependencies": {

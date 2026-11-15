@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex" />
+    <meta name="theme-color" content="#14110f" />
+    <title>書き出し検証（段階1）</title>
+    <link rel="stylesheet" href="/src/verify/style.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>書き出し検証</h1>
+        <p class="sub">段階1：動画に文字を重ねて mp4 で書き出せるかを確かめるページ</p>
+      </header>
+
+      <div id="support" class="box error" hidden></div>
+
+      <section>
+        <h2>1. 動画を選ぶ</h2>
+        <label class="file">
+          <input id="file" type="file" accept="video/mp4,.mp4" />
+          <span class="btn">mp4 動画を選ぶ</span>
+        </label>
+        <dl id="info" class="info" hidden></dl>
+      </section>
+
+      <section>
+        <h2>2. 出力の形を選ぶ</h2>
+        <div id="shapes" class="shapes">
+          <label><input type="radio" name="shape" value="landscape" checked /><span>横のまま<small data-size="landscape"></small></span></label>
+          <label><input type="radio" name="shape" value="portrait-fit" /><span>縦はめ込み（幅は元動画のまま）<small data-size="portrait-fit"></small></span></label>
+          <label><input type="radio" name="shape" value="portrait-fit-1080" /><span>縦はめ込み（1080×1920 に縮小・比較用）<small data-size="portrait-fit-1080"></small></span></label>
+        </div>
+        <p id="shape-note" class="note" hidden></p>
+      </section>
+
+      <section>
+        <h2>3. 書き出す</h2>
+        <p class="note">書き出し中は、この画面を前面に表示したままにしてください。ほかのアプリに切り替えたり画面を消したりすると、止まることがあります。</p>
+        <div class="row">
+          <button id="start" class="btn primary" disabled>書き出しを始める</button>
+          <button id="cancel" class="btn" hidden>中止する</button>
+        </div>
+
+        <div id="progress" class="box" hidden>
+          <div class="bar"><div id="bar-fill"></div></div>
+          <p class="big"><span id="percent">0</span>%</p>
+          <dl class="info">
+            <dt>経過時間</dt><dd id="elapsed">0秒</dd>
+            <dt>残りの目安</dt><dd id="remaining">計算中</dd>
+            <dt>処理の速さ</dt><dd id="speed">-</dd>
+            <dt>今の作業</dt><dd id="stage">-</dd>
+          </dl>
+          <canvas id="preview" width="320" height="180"></canvas>
+        </div>
+      </section>
+
+      <div id="error" class="box error" hidden></div>
+
+      <section id="result" hidden>
+        <h2>結果</h2>
+        <div id="verdict" class="box"></div>
+        <dl id="result-info" class="info"></dl>
+        <video id="player" controls playsinline preload="metadata"></video>
+        <div class="row">
+          <a id="save" class="btn primary" download>端末に保存する</a>
+          <button id="share" class="btn" hidden>共有する</button>
+          <button id="copy" class="btn">結果の文をコピー</button>
+        </div>
+        <p class="note">「結果の文をコピー」で、所要時間などの数字をまとめてコピーできます。そのまま Claude に貼って伝えてください。</p>
+      </section>
+
+      <details>
+        <summary>記録（詳しい経過）</summary>
+        <pre id="log"></pre>
+      </details>
+
+      <footer>ビルド：<span id="build"></span></footer>
+    </main>
+    <script type="module" src="/src/verify/main.ts"></script>
+  </body>
+</html>

@@ -12,5 +12,12 @@ export default defineConfig({
   },
   build: {
     target: 'es2022',
+    rollupOptions: {
+      // ページは2枚。アプリ本体と、段階1の書き出し検証ページ。
+      input: {
+        main: 'index.html',
+        verify: 'verify.html',
+      },
+    },
   },
 });

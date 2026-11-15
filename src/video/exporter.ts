@@ -24,8 +24,7 @@ import {
   type StreamTargetChunk,
   type Target,
 } from 'mediabunny';
-import { drawOverlay } from './draw';
-import { computeLayout, type Layout, type Shape } from './layout';
+import { computeLayout, type Layout, type Shape } from '../layout';
 
 /** 利用者にそのまま見せられる日本語のエラー */
 export class ExportError extends Error {
@@ -279,14 +278,27 @@ function describeDiscardReason(reason: string): string {
   }
 }
 
-export function startExport(file: File, info: VideoInfo, shape: Shape, cb: ExportCallbacks): ExportHandle {
+export interface ExportOptions {
+  /** 映像の上に重ねる絵を描く関数。プレビューと同じ描画関数を渡す */
+  draw(ctx: CanvasRenderingContext2D, layout: Layout, timeSec: number): void;
+  /** 圧縮の細かさ（bps）。省くと元動画に合わせる */
+  bitrate?: number;
+}
+
+export function startExport(
+  file: File,
+  info: VideoInfo,
+  shape: Shape,
+  options: ExportOptions,
+  cb: ExportCallbacks,
+): ExportHandle {
   let conversion: Conversion | null = null;
   let canceled = false;
 
   const run = async (): Promise<ExportResult> => {
     const startedAt = performance.now();
     const layout = computeLayout(shape, info.width, info.height);
-    const bitrate = chooseBitrate(info);
+    const bitrate = options.bitrate ?? chooseBitrate(info);
     const quality = new Quality({ bitrate });
 
     cb.onStage('書き出しの準備');
@@ -345,7 +357,7 @@ export function startExport(file: File, info: VideoInfo, shape: Shape, cb: Expor
               ctx.fillRect(0, 0, layout.width, layout.height);
             }
             sample.draw(ctx, v.x, v.y, v.width, v.height);
-            drawOverlay(ctx, layout, Math.max(0, sample.timestamp));
+            options.draw(ctx, layout, Math.max(0, sample.timestamp));
             frames++;
             cb.onFrame?.(canvas);
             // 元のコマと同じ時刻・同じ長さで出す。フレームレートを変えず、音とのずれを作らない。

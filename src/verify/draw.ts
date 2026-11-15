@@ -1,7 +1,7 @@
 // 文字を描く関数。プレビューと書き出しで必ず同じものを使う（CLAUDE.md の決まり）。
 // 段階1では、固定の日本語の文字と経過秒数を描くだけ。
 
-import type { Layout } from './layout';
+import type { Layout } from '../layout';
 
 export type Ctx2D = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
 

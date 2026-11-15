@@ -13,6 +13,12 @@ export interface WaitItem {
   label: string;
 }
 
+/** 行に重ねる効果。fx は効果の番号（src/engine/effects）、amount は効かせる量 0〜1 */
+export interface LayerRef {
+  fx: string;
+  amount: number;
+}
+
 export interface LineItem {
   type: 'line';
   id: string;
@@ -23,6 +29,10 @@ export interface LineItem {
   start: number;
   end: number;
   preset: string;
+  /** 動きの上に重ねる効果（グリッチ、粒子、奥行きなど）。順番に意味がある（後ろが優先） */
+  layers: LayerRef[];
+  /** 当てはめたレシピの番号。手で動きや効果を変えたら null に戻す（表示用の印） */
+  recipe: string | null;
   /** 強さ 0〜1 */
   strength: number;
   /** 速さ 0〜1 */
@@ -133,6 +143,19 @@ function num(v: unknown, fallback: number, min = -Infinity, max = Infinity): num
   return Math.min(max, Math.max(min, n));
 }
 
+/** 重ねた効果の一覧を読む。形のおかしいものは捨て、数にも上限を設ける */
+export function normalizeLayers(raw: unknown): LayerRef[] {
+  if (!Array.isArray(raw)) return [];
+  const out: LayerRef[] = [];
+  for (const r of raw) {
+    if (!r || typeof r.fx !== 'string' || r.fx.length === 0 || r.fx.length > 40) continue;
+    if (out.some((o) => o.fx === r.fx)) continue; // 同じ効果の二重がけはしない
+    out.push({ fx: r.fx, amount: num(r.amount, 0.5, 0, 1) });
+    if (out.length >= 8) break;
+  }
+  return out;
+}
+
 /**
  * 保存データを読み込むときに、欠けた項目を補い、おかしな値を直す。
  * 将来データ形式を変えたときは、ここで version を見て古い作品を変換する。
@@ -192,6 +215,9 @@ export function normalizeProject(raw: unknown): Project | null {
         start,
         end,
         preset: typeof i.preset === 'string' ? i.preset : 'fall',
+        // 演出拡張より前に作った作品には無い項目。空として読む
+        layers: normalizeLayers(i.layers),
+        recipe: typeof i.recipe === 'string' ? i.recipe : null,
         strength: num(i.strength, 0.5, 0, 1),
         speed: num(i.speed, 0.5, 0, 1),
         position: POSITIONS.includes(i.position) ? i.position : null,

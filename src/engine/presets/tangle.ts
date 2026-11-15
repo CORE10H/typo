@@ -24,14 +24,15 @@ export const tangle: Preset = {
   kind: 'special',
   sizeFactor: 1,
   particles: 1,
+  meta: { moods: ['obsess', 'fear'], roles: ['verse', 'pre', 'bridge', 'outro'], energy: 0.55, legibility: 2, minDur: 1.8 },
 
   state(c, L, s) {
     resetState(s);
     const inDur = Math.min(0.9 * L.sp, L.dur * 0.4);
     const outDur = Math.min(1.0 * L.sp, L.dur * 0.4);
     const stagger = (c.n > 1 ? Math.abs(c.i / (c.n - 1) - 0.5) * 2 : 0) * 0.35;
-    const pIn = clamp01(L.t / inDur - stagger * 0.5);
-    const pOut = clamp01((L.t - (L.dur - outDur)) / outDur - (0.35 - stagger) * 0.5);
+    const pIn = L.noEnter ? 1 : clamp01(L.t / inDur - stagger * 0.5);
+    const pOut = L.noExit ? 0 : clamp01((L.t - (L.dur - outDur)) / outDur - (0.35 - stagger) * 0.5);
     const turn = Math.PI * 2.2 * L.k;
 
     if (pIn < 1) {

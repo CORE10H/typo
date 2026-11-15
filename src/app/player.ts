@@ -6,7 +6,7 @@ import type { Project } from '../core/model';
 import { ensureThemeFont } from '../engine/fonts';
 import { Renderer } from '../engine/renderer';
 import { getTheme } from '../engine/themes';
-import { computeLayout, type Layout } from '../layout';
+import { cameraRect, computeLayout, type Layout } from '../layout';
 
 /** プレビューの細かさ。画素数をこのくらいに抑えて、スマホでもなめらかに動かす */
 const PREVIEW_PIXELS = 640 * 360;
@@ -172,8 +172,21 @@ export class Player {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.fillStyle = '#000000';
     ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    const t = this.time;
     if (this.hasVideo && this.video.readyState >= 2) {
-      ctx.drawImage(this.video, v.x * ps, v.y * ps, v.width * ps, v.height * ps);
+      const cam = renderer.camera(t);
+      if (cam) {
+        // 映像を少し大きく描き、枠からはみ出た分を切り取る（書き出しと同じやり方）
+        const r = cameraRect(layout, cam);
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(v.x * ps, v.y * ps, v.width * ps, v.height * ps);
+        ctx.clip();
+        ctx.drawImage(this.video, r.x * ps, r.y * ps, r.width * ps, r.height * ps);
+        ctx.restore();
+      } else {
+        ctx.drawImage(this.video, v.x * ps, v.y * ps, v.width * ps, v.height * ps);
+      }
     } else {
       const theme = getTheme(project.theme);
       const grad = ctx.createLinearGradient(0, v.y * ps, 0, (v.y + v.height) * ps);
@@ -182,7 +195,7 @@ export class Player {
       ctx.fillStyle = grad;
       ctx.fillRect(v.x * ps, v.y * ps, v.width * ps, v.height * ps);
     }
-    renderer.draw(ctx, this.time);
+    renderer.draw(ctx, t);
   }
 
   destroy(): void {

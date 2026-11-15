@@ -17,6 +17,21 @@ export interface Layout {
   video: { x: number; y: number; width: number; height: number };
 }
 
+/** 映像そのものの動き（寄り・揺れ）。scale は 1 以上、dx・dy は出力のピクセル */
+export interface Camera {
+  scale: number;
+  dx: number;
+  dy: number;
+}
+
+/** カメラの動きを反映した、映像を描く場所と大きさ。枠からはみ出す分は、呼び出し側で切り取る */
+export function cameraRect(layout: Layout, cam: Camera): { x: number; y: number; width: number; height: number } {
+  const v = layout.video;
+  const width = v.width * cam.scale;
+  const height = v.height * cam.scale;
+  return { x: v.x - (width - v.width) / 2 + cam.dx, y: v.y - (height - v.height) / 2 + cam.dy, width, height };
+}
+
 /** 動画の圧縮は偶数の寸法しか受け付けないことが多いので、偶数に丸める */
 function toEven(n: number): number {
   return Math.max(2, Math.round(n / 2) * 2);

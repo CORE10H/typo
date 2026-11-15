@@ -1,93 +1,18 @@
 // 叩き台づくり（仕様書3章の4、4章「叩き台」）。
 //   時間：待機区間を避けて均等割り。
-//   動き：歌詞の言葉とテーマに沿って自動で選ぶ。固定の印が付いた行は上書きしない。
+//   演出：歌詞の言葉・曲の中での場所・テーマに沿って自動で選ぶ（suggest.ts）。固定の印が付いた行は上書きしない。
 
-import { hash, hashString } from '../engine/util';
 import type { ParsedLine } from './lyrics';
 import { linesOf, newId, waitsOf, type LineItem, type Project } from './model';
-
-/** 歌詞の言葉から、向いている動きを選ぶための手がかり（仕様書6章「向く歌詞」） */
-const KEYWORD_RULES: [RegExp, string][] = [
-  [/蜜|甘|溶|とろ|滴|雫|涙|濡|シロップ|液|毒/, 'drip'],
-  [/壊|砕|裂|割|崩|破|散|千切|粉々/, 'shatter'],
-  [/踊|舞|ワルツ|回|廻|輪|くるくる/, 'rondo'],
-  [/縛|罠|絡|鎖|糸|囚|檻|捕|逃げられ/, 'tangle'],
-  [/溺|眠|沈|深|底|堕|落ち/, 'sink'],
-  [/狂|怖|震|叫|悲鳴|恐|痛|拷問|壊れそう/, 'tremble'],
-  [/染|記憶|滲|霞|ぼやけ|思い出|面影|忘れ/, 'blur'],
-  [/刹那|光|閃|瞬|煌|輝|稲妻/, 'flash'],
-  [/心|鼓動|胸|脈|愛|熱|高鳴/, 'pulse'],
-  [/！|!|叩|撃|殺|刺|奪|砕け/, 'impact'],
-];
-
-/** テーマごとの、よく使う動き */
-const THEME_POOLS: Record<string, string[]> = {
-  dokuringo: ['fall', 'pulse', 'impact', 'tremble', 'shatter', 'flash', 'rondo', 'drip'],
-  seido: ['blur', 'fall', 'whisper', 'sink', 'flash', 'rondo', 'pulse'],
-  mitsu: ['drip', 'sink', 'blur', 'pulse', 'rondo', 'fall', 'tangle'],
-};
-const OPENING = ['fall', 'blur', 'whisper'];
-const CLOSING = ['sink', 'blur', 'shatter', 'tangle'];
-const SHORT = ['impact', 'flash', 'pulse'];
-
-function pickFrom(pool: string[], seed: number, avoid: string | null): string {
-  for (let i = 0; i < 4; i++) {
-    const choice = pool[Math.floor(hash(seed, i + 1) * pool.length) % pool.length];
-    if (choice !== avoid) return choice;
-  }
-  return pool[0];
-}
+import { applySuggestions, suggest } from './suggest';
 
 /**
- * 動きを自動で割り当てる。
+ * 演出を自動で割り当てる。選び方の中身は suggest.ts にある。
+ * 固定の印が付いた行は上書きしない。同じ歌詞の区間（2回目のサビなど）は、1回目と同じ割り当てになる。
  * @param seed 「おまかせで振り直す」のたびに変える番号
  */
-export function assignPresets(p: Project, seed: number): void {
-  const lines = linesOf(p);
-  const pool = THEME_POOLS[p.theme] ?? THEME_POOLS.dokuringo;
-
-  // 同じ文面の区間（2回目のサビなど）は、1回目と同じ割り当てにする
-  const sections = new Map<string, LineItem[]>();
-  for (const l of lines) {
-    const list = sections.get(l.section) ?? [];
-    list.push(l);
-    sections.set(l.section, list);
-  }
-  const firstBySignature = new Map<string, LineItem[]>();
-
-  let prev: string | null = null;
-  for (const [, group] of sections) {
-    const signature = group.map((l) => l.phrases.join('')).join('\n');
-    const original = firstBySignature.get(signature);
-    group.forEach((line, i) => {
-      if (line.locked) {
-        prev = line.preset;
-        return;
-      }
-      if (original && original[i]) {
-        line.preset = original[i].preset;
-        line.strength = original[i].strength;
-        line.speed = original[i].speed;
-        prev = line.preset;
-        return;
-      }
-      const text = line.phrases.join('');
-      const s = (hashString(line.id) ^ Math.imul(seed + 1, 2654435761)) | 0;
-      const len = Array.from(text).length;
-      let choice: string | null = null;
-      const rule = KEYWORD_RULES.find(([re]) => re.test(text));
-      if (rule && hash(s, 20) < 0.75 && rule[1] !== prev) choice = rule[1];
-      if (!choice) {
-        if (i === 0 && group.length > 1) choice = pickFrom(OPENING, s, prev);
-        else if (i === group.length - 1 && group.length > 2 && hash(s, 21) < 0.6) choice = pickFrom(CLOSING, s, prev);
-        else if (len <= 5) choice = pickFrom(SHORT, s, prev);
-        else choice = pickFrom(pool, s, prev);
-      }
-      line.preset = choice;
-      prev = choice;
-    });
-    if (!original) firstBySignature.set(signature, group);
-  }
+export function assignPresets(p: Project, seed: number): number {
+  return applySuggestions(p, suggest(p, seed));
 }
 
 /** 歌詞を出せる時間帯（待機区間を除いた部分）を求める */
@@ -148,6 +73,8 @@ export function buildDraft(p: Project, parsed: ParsedLine[]): void {
     start: 0,
     end: 0,
     preset: 'fall',
+    layers: [],
+    recipe: null,
     strength: 0.5,
     speed: 0.5,
     position: null,
@@ -174,7 +101,7 @@ export function sortItems(p: Project): void {
   p.items = out;
 }
 
-/** 区間の設定（動き・強さ・速さ・並べ方・位置・色）を、別の区間へ行の順に写す（2回目のサビ用） */
+/** 区間の設定（動き・重ねた効果・強さ・速さ・並べ方・位置・色）を、別の区間へ行の順に写す（2回目のサビ用） */
 export function copySectionSettings(p: Project, from: string, to: string): number {
   const lines = linesOf(p);
   const src = lines.filter((l) => l.section === from);
@@ -184,6 +111,8 @@ export function copySectionSettings(p: Project, from: string, to: string): numbe
     const s = src[i];
     if (!s) return;
     line.preset = s.preset;
+    line.layers = s.layers.map((l) => ({ ...l }));
+    line.recipe = s.recipe;
     line.strength = s.strength;
     line.speed = s.speed;
     line.position = s.position;

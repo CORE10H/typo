@@ -1,8 +1,8 @@
-// プリセット一覧。名前ではなく、その行の歌詞で実際に動く小さな見本で並べる（仕様書7章）。
+// 演出の一覧。名前ではなく、その行の歌詞で実際に動く小さな見本で並べる（仕様書7章）。
+// レシピの一覧と、動きの一覧の両方に使う。
 
 import type { LineItem, Project } from '../../core/model';
 import { ensureThemeFont } from '../../engine/fonts';
-import { PRESETS } from '../../engine/presets';
 import { Renderer } from '../../engine/renderer';
 import { getTheme } from '../../engine/themes';
 import type { Layout } from '../../layout';
@@ -13,14 +13,26 @@ const H = 270;
 const CANVAS_W = 168;
 const LAYOUT: Layout = { shape: 'landscape', width: W, height: H, video: { x: 0, y: 0, width: W, height: H } };
 
-interface Thumb {
+/** 見本1つぶんの定義 */
+export interface ThumbChoice {
   id: string;
+  name: string;
+  hint: string;
+  /** 見本用の行に、この選択肢を当てはめる */
+  apply(line: LineItem): void;
+  /** いまの行が、この選択肢を使っているか */
+  active(line: LineItem): boolean;
+}
+
+interface Thumb {
+  choice: ThumbChoice;
   button: HTMLButtonElement;
   ctx: CanvasRenderingContext2D;
   renderer: Renderer;
+  visible: boolean;
 }
 
-export class PresetThumbs {
+export class ChoiceThumbs {
   readonly el: HTMLElement;
   private thumbs: Thumb[] = [];
   private raf = 0;
@@ -29,30 +41,49 @@ export class PresetThumbs {
   private lastPaint = 0;
   private duration = 2.4;
   private backdrop: [string, string] = ['#222', '#000'];
+  private observer: IntersectionObserver | null = null;
 
-  constructor(onPick: (presetId: string) => void) {
+  constructor(choices: ThumbChoice[], onPick: (choice: ThumbChoice) => void) {
     this.el = h('div', { class: 'thumbs' });
-    for (const preset of PRESETS) {
+    // 画面に見えている見本だけを動かす（数が多いので、スマホでの負担を抑える）
+    if (typeof IntersectionObserver !== 'undefined') {
+      this.observer = new IntersectionObserver(
+        (entries) => {
+          for (const entry of entries) {
+            const t = this.thumbs.find((x) => x.button === entry.target);
+            if (t) t.visible = entry.isIntersecting;
+          }
+        },
+        { root: this.el, rootMargin: '0px 80px' },
+      );
+    }
+    for (const choice of choices) {
       const canvas = h('canvas', { width: CANVAS_W, height: Math.round((CANVAS_W * H) / W) });
       const ctx = canvas.getContext('2d', { alpha: false });
       if (!ctx) continue;
-      const button = h(
-        'button',
-        { class: 'thumb', title: preset.hint, onclick: () => onPick(preset.id) },
-        canvas,
-        h('span', null, preset.name),
-      );
-      this.thumbs.push({ id: preset.id, button, ctx, renderer: new Renderer(LAYOUT, CANVAS_W / W) });
+      const button = h('button', { class: 'thumb', title: choice.hint, onclick: () => onPick(choice) }, canvas, h('span', null, choice.name));
+      this.thumbs.push({ choice, button, ctx, renderer: new Renderer(LAYOUT, CANVAS_W / W), visible: !this.observer });
+      this.observer?.observe(button);
       this.el.append(button);
     }
   }
 
   /** 見本に使う行を入れ替える */
   setLine(p: Project, line: LineItem): void {
-    this.duration = Math.min(3.6, Math.max(1.8, line.end - line.start));
+    this.duration = Math.min(3.6, Math.max(2.2, line.end - line.start));
     const theme = getTheme(p.theme);
     this.backdrop = theme.backdrop;
     for (const t of this.thumbs) {
+      const sample: LineItem = {
+        ...line,
+        id: `thumb-${t.choice.id}`,
+        layers: line.layers.map((l) => ({ ...l })),
+        start: 0,
+        end: this.duration,
+        position: null,
+        phrases: line.phrases.slice(0, 2),
+      };
+      t.choice.apply(sample);
       const mini: Project = {
         ...p,
         output: { shape: 'landscape', band: 'black' },
@@ -60,26 +91,22 @@ export class PresetThumbs {
         position: 'middle',
         textScale: Math.min(2, p.textScale * 1.45),
         beat: { ...p.beat, offset: 0 },
-        items: [
-          {
-            ...line,
-            id: `thumb-${t.id}`,
-            preset: t.id,
-            start: 0,
-            end: this.duration,
-            position: null,
-            phrases: line.phrases.slice(0, 2),
-          },
-        ],
+        items: [sample],
       };
       t.renderer.setProject(mini);
       t.renderer.invalidate();
-      t.button.classList.toggle('on', t.id === line.preset);
+      t.button.classList.toggle('on', t.choice.active(line));
     }
     void ensureThemeFont(theme).then(() => {
       for (const t of this.thumbs) t.renderer.invalidate();
     });
     this.startedAt = performance.now();
+  }
+
+  /** いま選ばれている見本が見えるところまで、横に送る */
+  revealActive(): void {
+    const on = this.thumbs.find((t) => t.button.classList.contains('on'));
+    if (on) this.el.scrollLeft = Math.max(0, on.button.offsetLeft - this.el.offsetLeft - 8);
   }
 
   start(): void {
@@ -102,6 +129,7 @@ export class PresetThumbs {
     if (!this.el.isConnected || this.el.offsetParent === null) return;
     const t = ((now - this.startedAt) / 1000) % (this.duration + 0.5);
     for (const th of this.thumbs) {
+      if (!th.visible) continue;
       const { ctx } = th;
       const cw = ctx.canvas.width;
       const ch = ctx.canvas.height;

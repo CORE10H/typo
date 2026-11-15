@@ -15,7 +15,10 @@ import {
   type Position,
   type Project,
 } from '../../core/model';
-import { presetName } from '../../engine/presets';
+import { EFFECTS, MAX_LAYERS, getEffect } from '../../engine/effects';
+import { CATEGORY_LABELS, type EffectCategory } from '../../engine/effects/types';
+import { PRESETS, presetName } from '../../engine/presets';
+import { RECIPES, applyRecipe, getRecipe } from '../../engine/recipes';
 import { THEMES, getTheme } from '../../engine/themes';
 import { ExportError } from '../../video/exporter';
 import { runAutoColor, type AutoColorJob } from '../autocolor';
@@ -24,17 +27,28 @@ import { Player } from '../player';
 import { go } from '../router';
 import { app, type ChangeKind } from '../state';
 import { attachVideo, chooseVideoFile } from '../video';
+import { openSuggest } from './suggestui';
 import { openTapSync } from './tapsync';
-import { PresetThumbs } from './thumbs';
+import { ChoiceThumbs } from './thumbs';
 import { Timeline } from './timeline';
 
-type PanelTab = 'motion' | 'time' | 'text' | 'look';
+type PanelTab = 'motion' | 'layers' | 'time' | 'text' | 'look';
+
+/** 行リストなどに出す、行の演出の短い呼び名 */
+function describeLine(line: LineItem): string {
+  const recipe = getRecipe(line.recipe);
+  if (recipe) return `★${recipe.name}`;
+  const n = line.layers.filter((l) => getEffect(l.fx)).length;
+  return n > 0 ? `${presetName(line.preset)}＋${n}` : presetName(line.preset);
+}
 
 export function mountEdit(root: HTMLElement): () => void {
   let p = app.project as Project;
   let selectedId: string | null = null;
   let view: 'list' | 'timeline' = 'list';
   let panelTab: PanelTab = 'motion';
+  let motionView: 'recipe' | 'motion' = 'recipe';
+  let fxCategory: EffectCategory = 'glitch';
   let seeking = false;
   let tapping = false;
   let colorJob: AutoColorJob | null = null;
@@ -80,13 +94,48 @@ export function mountEdit(root: HTMLElement): () => void {
   });
   timeline.el.hidden = true;
 
-  const thumbs = new PresetThumbs((presetId) => {
-    const line = selectedLine();
-    if (!line) return;
-    line.preset = presetId;
-    line.locked = true;
-    app.commit();
-  });
+  // レシピ（動き＋効果の組み合わせ）の見本
+  const recipeThumbs = new ChoiceThumbs(
+    RECIPES.map((r) => ({
+      id: r.id,
+      name: r.name,
+      hint: r.hint,
+      apply: (l: LineItem) => applyRecipe(l, r),
+      active: (l: LineItem) => l.recipe === r.id,
+    })),
+    (choice) => {
+      const line = selectedLine();
+      const recipe = getRecipe(choice.id);
+      if (!line || !recipe) return;
+      applyRecipe(line, recipe);
+      line.locked = true;
+      app.commit();
+    },
+  );
+  // 動きの見本（重ねた効果はそのまま残して、動きだけを入れ替える）
+  const motionThumbs = new ChoiceThumbs(
+    PRESETS.map((m) => ({
+      id: m.id,
+      name: m.name,
+      hint: m.hint,
+      apply: (l: LineItem) => {
+        l.preset = m.id;
+      },
+      active: (l: LineItem) => l.preset === m.id,
+    })),
+    (choice) => {
+      const line = selectedLine();
+      if (!line) return;
+      line.preset = choice.id;
+      line.recipe = null;
+      line.locked = true;
+      app.commit();
+    },
+  );
+  const stopThumbs = (): void => {
+    recipeThumbs.stop();
+    motionThumbs.stop();
+  };
 
   // ---- 選択 ----------------------------------------------------------------
   const selectedLine = (): LineItem | null => linesOf(p).find((l) => l.id === selectedId) ?? null;
@@ -150,7 +199,7 @@ export function mountEdit(root: HTMLElement): () => void {
           },
           h('span', { class: 'line-time' }, formatTime(line.start)),
           h('span', { class: 'line-text' }, lineText(line)),
-          h('span', { class: 'line-preset' }, `${line.locked ? '🔒' : ''}${presetName(line.preset)}`),
+          h('span', { class: 'line-preset' }, `${line.locked ? '🔒' : ''}${describeLine(line)}`),
         ),
       );
     }
@@ -227,7 +276,7 @@ export function mountEdit(root: HTMLElement): () => void {
     panel.hidden = !line;
     clear(panel);
     if (!line) {
-      thumbs.stop();
+      stopThumbs();
       return;
     }
     const tab = (id: PanelTab, label: string): HTMLElement =>
@@ -245,12 +294,36 @@ export function mountEdit(root: HTMLElement): () => void {
     const body = h('div', { class: 'panel-body' });
 
     if (panelTab === 'motion') {
-      thumbs.setLine(p, line);
-      thumbs.start();
+      const active = motionView === 'recipe' ? recipeThumbs : motionThumbs;
+      (motionView === 'recipe' ? motionThumbs : recipeThumbs).stop();
+      active.setLine(p, line);
+      active.start();
+      const viewBtn = (id: 'recipe' | 'motion', label: string): HTMLElement =>
+        h(
+          'button',
+          {
+            class: `chip ${motionView === id ? 'on' : ''}`,
+            'aria-pressed': String(motionView === id),
+            onclick: () => {
+              motionView = id;
+              renderPanel();
+            },
+          },
+          label,
+        );
+      const layerCount = line.layers.filter((l) => getEffect(l.fx)).length;
       const others = sectionNames(p).filter((s) => s !== line.section);
       const source = h('select', { 'aria-label': '写す元の区間' }, others.map((s) => h('option', { value: s }, s)));
       body.append(
-        thumbs.el,
+        h('div', { class: 'chips tight' }, viewBtn('recipe', `★ レシピ（${RECIPES.length}）`), viewBtn('motion', `動き（${PRESETS.length}）`)),
+        active.el,
+        h(
+          'p',
+          { class: 'note' },
+          motionView === 'recipe'
+            ? 'レシピは、動きと効果を組み合わせた完成形です。選んだあと「重ね」で細かく直せます。'
+            : `動きだけを入れ替えます。${layerCount > 0 ? `重ねた効果（${layerCount}個）はそのまま残ります。` : ''}`,
+        ),
         slider('強さ', line.strength, (v) => {
           line.strength = v;
           line.locked = true;
@@ -267,7 +340,7 @@ export function mountEdit(root: HTMLElement): () => void {
             {
               class: `btn small ${line.locked ? 'on' : ''}`,
               'aria-pressed': String(line.locked),
-              title: '固定した行は「おまかせで振り直す」で上書きされません',
+              title: '固定した行は「おまかせで振り直す」「演出の提案」で上書きされません',
               onclick: () => {
                 line.locked = !line.locked;
                 app.commit();
@@ -284,13 +357,15 @@ export function mountEdit(root: HTMLElement): () => void {
                 for (const l of linesOf(p)) {
                   if (l.section !== line.section) continue;
                   l.preset = line.preset;
+                  l.layers = line.layers.map((x) => ({ ...x }));
+                  l.recipe = line.recipe;
                   l.strength = line.strength;
                   l.speed = line.speed;
                   l.locked = true;
                   n++;
                 }
                 app.commit();
-                toast(`「${line.section}」の ${n} 行に同じ動きを入れました`);
+                toast(`「${line.section}」の ${n} 行に同じ演出を入れました`);
               },
             },
             `「${line.section}」の全行に適用`,
@@ -317,8 +392,141 @@ export function mountEdit(root: HTMLElement): () => void {
             )
           : '',
       );
+      // いま選ばれている見本が見える位置まで送る（一覧が長いので）
+      requestAnimationFrame(() => active.revealActive());
     } else {
-      thumbs.stop();
+      stopThumbs();
+    }
+
+    if (panelTab === 'layers') {
+      // 重ねた効果を変えたら、レシピの印を外して行を固定する
+      const changed = (): void => {
+        line.recipe = null;
+        line.locked = true;
+        app.commit();
+      };
+      const known = line.layers.filter((l) => getEffect(l.fx));
+      const rows = known.map((ref) => {
+        const e = getEffect(ref.fx)!;
+        const index = line.layers.indexOf(ref);
+        const value = h('span', { class: 'value' }, Math.round(ref.amount * 100));
+        const input = h('input', {
+          type: 'range',
+          min: '0',
+          max: '1',
+          step: '0.01',
+          value: String(ref.amount),
+          'aria-label': `${e.name} の量`,
+          oninput: () => {
+            ref.amount = parseFloat(input.value);
+            value.textContent = String(Math.round(ref.amount * 100));
+            player.refresh();
+          },
+          onchange: changed,
+        });
+        return h(
+          'div',
+          { class: 'layer' },
+          h('div', { class: 'layer-head' }, h('strong', null, e.name), h('small', null, CATEGORY_LABELS[e.category])),
+          h(
+            'div',
+            { class: 'layer-row' },
+            input,
+            value,
+            h(
+              'button',
+              {
+                class: 'btn small',
+                disabled: index <= 0,
+                'aria-label': `${e.name} を前へ`,
+                title: '重なりの順番を1つ前へ（後ろにある効果が優先されます）',
+                onclick: () => {
+                  line.layers.splice(index, 1);
+                  line.layers.splice(index - 1, 0, ref);
+                  changed();
+                },
+              },
+              '↑',
+            ),
+            h(
+              'button',
+              {
+                class: 'btn small danger-text',
+                'aria-label': `${e.name} を外す`,
+                onclick: () => {
+                  line.layers = line.layers.filter((l) => l !== ref);
+                  changed();
+                },
+              },
+              '外す',
+            ),
+          ),
+        );
+      });
+      const full = known.length >= MAX_LAYERS;
+      const hard = known.filter((l) => getEffect(l.fx)!.legibility <= 2).length;
+      const categories = Object.keys(CATEGORY_LABELS) as EffectCategory[];
+      const recipe = getRecipe(line.recipe);
+      body.append(
+        h(
+          'p',
+          { class: 'note' },
+          recipe
+            ? `レシピ「${recipe.name}」の中身です。量を変えたり、外したり、足したりできます。`
+            : `動き「${presetName(line.preset)}」の上に、効果を重ねます。`,
+        ),
+        ...(rows.length > 0 ? rows : [h('p', { class: 'empty' }, 'まだ効果を重ねていません。')]),
+        hard >= 3 || known.length >= 4
+          ? h('p', { class: 'box warn' }, '効果をたくさん重ねると、歌詞が読みにくくなります。読ませたい行では、数を絞るのがおすすめです。')
+          : '',
+        h('span', { class: 'label' }, full ? `効果を足す（1行に ${MAX_LAYERS} 個まで。外してから足してください）` : '効果を足す'),
+        h(
+          'div',
+          { class: 'chips tight' },
+          categories.map((c) =>
+            h(
+              'button',
+              {
+                class: `chip ${fxCategory === c ? 'on' : ''}`,
+                'aria-pressed': String(fxCategory === c),
+                onclick: () => {
+                  fxCategory = c;
+                  renderPanel();
+                },
+              },
+              CATEGORY_LABELS[c],
+            ),
+          ),
+        ),
+        h(
+          'div',
+          { class: 'fx-list' },
+          EFFECTS.filter((e) => e.category === fxCategory).map((e) => {
+            const has = line.layers.some((l) => l.fx === e.id);
+            return h(
+              'button',
+              {
+                class: 'fx-item',
+                disabled: has || full,
+                onclick: () => {
+                  // 登場・退場を受け持つ効果は、それぞれ1つまで。すでにあれば入れ替える
+                  if (e.replaces) {
+                    const old = line.layers.find((l) => getEffect(l.fx)?.replaces === e.replaces);
+                    if (old) {
+                      line.layers = line.layers.filter((l) => l !== old);
+                      toast(`${e.replaces === 'enter' ? '登場' : '退場'}の効果は1つまでなので、「${getEffect(old.fx)!.name}」と入れ替えました`);
+                    }
+                  }
+                  line.layers = [...line.layers, { fx: e.id, amount: 0.5 }];
+                  changed();
+                },
+              },
+              h('strong', null, has ? `✓ ${e.name}` : `＋ ${e.name}`),
+              h('small', null, e.hint),
+            );
+          }),
+        ),
+      );
     }
 
     if (panelTab === 'time') {
@@ -481,7 +689,7 @@ export function mountEdit(root: HTMLElement): () => void {
         h('strong', { class: 'panel-title' }, lineText(line)),
         h('button', { class: 'btn icon', 'aria-label': '閉じる', onclick: () => select(null) }, '×'),
       ),
-      h('div', { class: 'segs' }, tab('motion', '動き'), tab('time', '時間'), tab('text', '文字'), tab('look', '位置と色')),
+      h('div', { class: 'segs' }, tab('motion', '演出'), tab('layers', `重ね${line.layers.length > 0 ? `(${line.layers.length})` : ''}`), tab('time', '時間'), tab('text', '文字'), tab('look', '位置と色')),
       body,
     );
   }
@@ -730,14 +938,26 @@ export function mountEdit(root: HTMLElement): () => void {
           'button',
           {
             class: 'btn small',
-            title: '固定していない行の動きを、選び直します',
+            title: '固定していない行の演出を、すぐに選び直します',
             onclick: () => {
-              assignPresets(p, Math.floor(Math.random() * 1e9));
+              const n = assignPresets(p, Math.floor(Math.random() * 1e9));
               app.commit();
-              toast('動きを振り直しました（固定した行はそのまま）');
+              toast(n > 0 ? `${n} 行の演出を振り直しました（固定した行はそのまま）` : '振り直せる行がありません（すべて固定されています）');
             },
           },
           'おまかせで振り直す',
+        ),
+        h(
+          'button',
+          {
+            class: 'btn small',
+            title: '演出の案と、選んだ理由を見てから当てはめます。AIに相談することもできます',
+            onclick: () => {
+              if (linesOf(p).length === 0) return;
+              openSuggest(p);
+            },
+          },
+          '演出の提案',
         ),
         h('button', { class: 'btn small', onclick: openSettings }, '見た目'),
         colorStatus,
@@ -757,7 +977,7 @@ export function mountEdit(root: HTMLElement): () => void {
     window.removeEventListener('keydown', onKey);
     window.clearTimeout(colorTimer);
     colorJob?.cancel();
-    thumbs.stop();
+    stopThumbs();
     player.destroy();
     document.querySelectorAll('.modal, .tap-overlay').forEach((el) => el.remove());
   };

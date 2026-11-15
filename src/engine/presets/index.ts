@@ -1,7 +1,8 @@
-// 動き（プリセット）の一覧。仕様書6章の12種。
+// 動き（プリセット）の一覧。仕様書6章の12種と、演出拡張で足した動き。
 // 特殊型を足すときは、ファイルを1つ作ってここに1行足すだけでよい。
 
 import { BASIC_PRESET_DEFS, makeBasicPreset } from './basic';
+import { flip } from './flip';
 import { rondo } from './rondo';
 import { shatter } from './shatter';
 import { tangle } from './tangle';
@@ -14,7 +15,7 @@ const pick = (id: string): Preset => {
   return p;
 };
 
-/** 画面に並べる順（仕様書の表の順） */
+/** 画面に並べる順（先頭の12種は仕様書の表の順） */
 export const PRESETS: Preset[] = [
   pick('fall'),
   pick('drip'),
@@ -28,9 +29,22 @@ export const PRESETS: Preset[] = [
   tangle,
   pick('sink'),
   pick('flash'),
+  pick('slide'),
+  pick('rise'),
+  pick('approach'),
+  pick('type'),
+  pick('bounce'),
+  pick('crush'),
+  pick('scatter'),
+  flip,
+  pick('still'),
 ];
 
 const byId = new Map(PRESETS.map((p) => [p.id, p]));
+
+export function hasPreset(id: string): boolean {
+  return byId.has(id);
+}
 
 export function getPreset(id: string): Preset {
   return byId.get(id) ?? PRESETS[0];

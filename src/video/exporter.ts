@@ -24,7 +24,7 @@ import {
   type StreamTargetChunk,
   type Target,
 } from 'mediabunny';
-import { computeLayout, type Layout, type Shape } from '../layout';
+import { cameraRect, computeLayout, type Camera, type Layout, type Shape } from '../layout';
 
 /** 利用者にそのまま見せられる日本語のエラー */
 export class ExportError extends Error {
@@ -281,6 +281,8 @@ function describeDiscardReason(reason: string): string {
 export interface ExportOptions {
   /** 映像の上に重ねる絵を描く関数。プレビューと同じ描画関数を渡す */
   draw(ctx: CanvasRenderingContext2D, layout: Layout, timeSec: number): void;
+  /** 映像そのものの動き（寄り・揺れ）。無ければ null。プレビューと同じ関数を渡す */
+  camera?(timeSec: number): Camera | null;
   /** 圧縮の細かさ（bps）。省くと元動画に合わせる */
   bitrate?: number;
 }
@@ -356,8 +358,21 @@ export function startExport(
               ctx.fillStyle = '#000000';
               ctx.fillRect(0, 0, layout.width, layout.height);
             }
-            sample.draw(ctx, v.x, v.y, v.width, v.height);
-            options.draw(ctx, layout, Math.max(0, sample.timestamp));
+            const timeSec = Math.max(0, sample.timestamp);
+            const cam = options.camera?.(timeSec) ?? null;
+            if (cam) {
+              // 映像を少し大きく描き、枠からはみ出た分を切り取る（寄り・揺れの演出）
+              const r = cameraRect(layout, cam);
+              ctx.save();
+              ctx.beginPath();
+              ctx.rect(v.x, v.y, v.width, v.height);
+              ctx.clip();
+              sample.draw(ctx, r.x, r.y, r.width, r.height);
+              ctx.restore();
+            } else {
+              sample.draw(ctx, v.x, v.y, v.width, v.height);
+            }
+            options.draw(ctx, layout, timeSec);
             frames++;
             cb.onFrame?.(canvas);
             // 元のコマと同じ時刻・同じ長さで出す。フレームレートを変えず、音とのずれを作らない。

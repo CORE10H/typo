@@ -18,13 +18,14 @@ export const rondo: Preset = {
   kind: 'special',
   sizeFactor: 1,
   particles: 1.1,
+  meta: { moods: ['excite', 'sensual'], roles: ['chorus', 'verse', 'bridge'], energy: 0.6, legibility: 2, minDur: 1.8 },
 
   state(c, L, s) {
     resetState(s);
     const inDur = Math.min(1.2 * L.sp, L.dur * 0.45);
     const outDur = Math.min(0.9 * L.sp, L.dur * 0.35);
-    const pIn = clamp01(L.t / inDur);
-    const pOut = clamp01((L.t - (L.dur - outDur)) / outDur);
+    const pIn = L.noEnter ? 1 : clamp01(L.t / inDur);
+    const pOut = L.noExit ? 0 : clamp01((L.t - (L.dur - outDur)) / outDur);
 
     if (pIn < 1) {
       const e = ease('inOut', pIn);

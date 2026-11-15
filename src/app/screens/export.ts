@@ -181,7 +181,11 @@ export function mountExport(root: HTMLElement): () => void {
       v.file,
       v.info,
       shape,
-      { draw: (ctx, _layout, t) => renderer.draw(ctx, t), bitrate: chooseBitrate(v.info) },
+      {
+        draw: (ctx, _layout, t) => renderer.draw(ctx, t),
+        camera: (t) => renderer.camera(t),
+        bitrate: chooseBitrate(v.info),
+      },
       {
         onProgress: (value) => {
           progress = value;
